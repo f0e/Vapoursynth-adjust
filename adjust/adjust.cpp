@@ -11,6 +11,10 @@
 
 #define CLAMP(value, min, max) ((value) < (min) ? (min) : ((value) > (max) ? (max) : (value)))
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 static inline float fast_atan2f(float y, float x) { // https://gist.github.com/velipso/fc5a58b7d9fc020ecf7f2f5fc907dfa5
 	static const float c1 = M_PI / 4.0;
 	static const float c2 = M_PI * 3.0 / 4.0;

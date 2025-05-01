@@ -1,0 +1,1 @@
+option('vs_sdk', type : 'string', value : '', description : 'Path to VapourSynth SDK')
