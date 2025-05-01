@@ -1,0 +1,142 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install meson ninja
+      
+      - name: Download VapourSynth Windows SDK
+        run: |
+          $WebClient = New-Object System.Net.WebClient
+          $WebClient.DownloadFile("https://github.com/vapoursynth/vapoursynth/releases/download/R71/VapourSynth64-Portable-R71.zip", "vs.zip")
+          7z x vs.zip -ovsenv
+        shell: pwsh
+      
+      - name: Use Developer Command Prompt for Microsoft Visual C++
+        uses: ilammy/msvc-dev-cmd@v1
+        
+      - name: Build plugin
+        run: |
+          meson setup build --vsenv -Dvs_sdk="$env:GITHUB_WORKSPACE\vsenv"
+          meson compile -C build
+        shell: pwsh
+      
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: adjust-windows
+          path: build/adjust.dll
+  
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libzimg-dev libomp-dev
+          python -m pip install --upgrade pip
+          pip install meson cython
+      
+      - name: Build VapourSynth from source
+        run: |
+          git clone https://github.com/vapoursynth/vapoursynth.git
+          cd vapoursynth
+          ./autogen.sh
+          ./configure
+          make
+          sudo make install
+      
+      - name: Build plugin
+        run: |
+          export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+          meson setup build
+          meson compile -C build
+      
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: adjust-linux
+          path: build/libadjust.so
+  
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          brew install meson vapoursynth ninja libomp llvm
+          python -m pip install --upgrade pip
+          pip install meson
+      
+      - name: Build plugin
+        run: |
+          export CC=/opt/homebrew/opt/llvm/bin/clang
+          export CXX=/opt/homebrew/opt/llvm/bin/clang++
+          export LDFLAGS="-L/opt/homebrew/opt/libomp/lib"
+          export CPPFLAGS="-I/opt/homebrew/opt/libomp/include"
+          export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+          meson setup build \
+            --buildtype=release \
+            -Dc_link_args="-fopenmp -L/opt/homebrew/opt/libomp/lib" \
+            -Dc_args="-fopenmp -I/opt/homebrew/opt/libomp/include" \
+            -Dcpp_link_args="-fopenmp -L/opt/homebrew/opt/libomp/lib" \
+            -Dcpp_args="-fopenmp -I/opt/homebrew/opt/libomp/include"
+          meson compile -C build
+      
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: adjust-macos
+          path: build/libadjust.dylib
+  
+  create-release:
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            adjust-windows/adjust.dll
+            adjust-linux/libadjust.so
+            adjust-macos/libadjust.dylib
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

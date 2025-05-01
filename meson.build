@@ -15,21 +15,24 @@ if gcc_syntax
   install_dir = vapoursynth_dep.get_variable(pkgconfig: 'libdir') / 'vapoursynth'
 else
   # MSVC
-  vs_env = get_option('vs_sdk')
-  if vs_env == ''
+  vs_sdk = get_option('vs_sdk')
+  if vs_sdk == ''
     error('Cannot find VapourSynth SDK. Please set vs_sdk option.')
   endif
   
-  vs_include_dir = vs_env / 'sdk/include/vapoursynth'
-  vs_lib_dir = vs_env / 'sdk/lib64'
+  vs_include = vs_sdk + '/sdk/include/vapoursynth'
+  vs_lib_dir = vs_sdk + '/sdk/lib64'
 
-  vs_lib = meson.get_compiler('cpp').find_library('vapoursynth', dirs: [vs_lib_dir])
-
+  vs_lib = cxx.find_library('vapoursynth', dirs: [vs_lib_dir])
+  
+  vs_include_args = ['-I' + vs_include]
+  
   vapoursynth_dep = declare_dependency(
-    include_directories: include_directories(vs_include_dir),
+    compile_args: vs_include_args,
     dependencies: [vs_lib]
   )
-  install_dir = vs_env + '/plugins'
+  
+  install_dir = vs_sdk + '/plugins'
 endif
 
 sources = [
